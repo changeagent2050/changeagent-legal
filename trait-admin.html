@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>changeAgent — Trait Catalog Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --bg: #0b1016; --panel: #121a24; --ink: #e8edf2; --muted: #8a97a6;
+    --accent: #3ad6ff; --amber: #ffb648; --danger: #ff6b6b; --border: #22303e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: -apple-system, system-ui, sans-serif;
+    margin: 0; padding: 24px; max-width: 900px; margin-inline: auto;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 15px; color: var(--accent); margin: 28px 0 10px; }
+  p.sub { color: var(--muted); margin-top: 0; font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  input, select, button, textarea {
+    font-size: 14px; border-radius: 6px; border: 1px solid var(--border);
+    background: #0e151d; color: var(--ink); padding: 8px 10px;
+  }
+  textarea { width: 100%; resize: vertical; font-family: inherit; }
+  button {
+    background: var(--accent); color: #06121a; border: none; font-weight: 600; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; padding: 4px 8px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 10px; }
+  .row > div { flex: 1; min-width: 140px; }
+  .trait-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .trait-chip {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 20px; cursor: pointer;
+    font-size: 13px; background: #0e151d;
+  }
+  .trait-chip.selected { border-color: var(--accent); color: var(--accent); }
+  .trait-chip .cat { color: var(--muted); font-size: 11px; margin-left: 6px; }
+  .tier-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .tier-col h3 { font-size: 13px; margin: 0 0 8px; }
+  .tier-col.t0 h3 { color: #8ddc9a; } .tier-col.t1 h3 { color: var(--amber); } .tier-col.t2 h3 { color: var(--danger); }
+  .action-item {
+    display: flex; justify-content: space-between; gap: 8px; align-items: start;
+    padding: 8px; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .action-item .vtag { color: var(--muted); font-size: 11px; display: block; margin-top: 2px; }
+  .msg { font-size: 13px; margin-top: 8px; }
+  .msg.err { color: var(--danger); } .msg.ok { color: #8ddc9a; }
+  #app { display: none; }
+  @media (max-width: 700px) { .tier-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>changeAgent — Trait Catalog Admin</h1>
+<p class="sub">Local tool, not published — manages <code>trait_catalog</code> / <code>trait_catalog_actions</code> directly in Supabase.</p>
+
+<div id="login" class="panel">
+  <div class="row">
+    <div>
+      <label>Email</label>
+      <input id="email" type="email" placeholder="you@example.com">
+    </div>
+    <div>
+      <label>Password</label>
+      <input id="password" type="password">
+    </div>
+    <div style="flex:0">
+      <button id="signInBtn">Sign In</button>
+    </div>
+  </div>
+  <div id="loginMsg" class="msg"></div>
+</div>
+
+<div id="app">
+  <div class="panel" style="display:flex; justify-content:space-between; align-items:center;">
+    <span id="whoami" style="font-size:13px; color:var(--muted);"></span>
+    <button class="secondary" id="signOutBtn">Sign out</button>
+  </div>
+
+  <h2>Add a new trait</h2>
+  <div class="panel">
+    <div class="row">
+      <div>
+        <label>Trait name</label>
+        <input id="newTraitName" placeholder="e.g. Empathy">
+      </div>
+      <div>
+        <label>Category</label>
+        <select id="newTraitCategory">
+          <option value="physical">Physical</option>
+          <option value="career">Career</option>
+          <option value="financial">Financial</option>
+          <option value="spiritual">Spiritual</option>
+          <option value="intellectual">Intellectual</option>
+          <option value="social">Social</option>
+        </select>
+      </div>
+      <div style="flex:0">
+        <button id="addTraitBtn">+ Add Trait</button>
+      </div>
+    </div>
+    <div id="addTraitMsg" class="msg"></div>
+  </div>
+
+  <h2>Traits</h2>
+  <div class="panel">
+    <div id="traitList" class="trait-list"></div>
+  </div>
+
+  <div id="traitDetail" style="display:none;">
+    <h2 id="selectedTraitHeading"></h2>
+    <div class="panel">
+      <div class="tier-grid">
+        <div class="tier-col t0">
+          <h3>Beginner (pools across all verticals)</h3>
+          <div id="actions-0"></div>
+          <div class="row" style="margin-top:10px;">
+            <div style="flex:2;"><textarea id="newAction-0" rows="2" placeholder="New Beginner action..."></textarea></div>
+          </div>
+          <div class="row">
+            <div><label>Vertical</label><input id="vertical-0" value="core"></div>
+            <div style="flex:0"><button data-tier="0" class="addActionBtn">+ Add</button></div>
+          </div>
+        </div>
+        <div class="tier-col t1">
+          <h3>Intermediate (vertical-exclusive)</h3>
+          <div id="actions-1"></div>
+          <div class="row" style="margin-top:10px;">
+            <div style="flex:2;"><textarea id="newAction-1" rows="2" placeholder="New Intermediate action..."></textarea></div>
+          </div>
+          <div class="row">
+            <div><label>Vertical</label><input id="vertical-1" value="core"></div>
+            <div style="flex:0"><button data-tier="1" class="addActionBtn">+ Add</button></div>
+          </div>
+        </div>
+        <div class="tier-col t2">
+          <h3>Advanced (vertical-exclusive)</h3>
+          <div id="actions-2"></div>
+          <div class="row" style="margin-top:10px;">
+            <div style="flex:2;"><textarea id="newAction-2" rows="2" placeholder="New Advanced action..."></textarea></div>
+          </div>
+          <div class="row">
+            <div><label>Vertical</label><input id="vertical-2" value="core"></div>
+            <div style="flex:0"><button data-tier="2" class="addActionBtn">+ Add</button></div>
+          </div>
+        </div>
+      </div>
+      <div id="actionMsg" class="msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://ppnzexuclnzcvqdruutt.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_CTbKV0ilEPGd3L7lkpDAYw_NfpKQx5J";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const CATEGORY_LABEL = { physical: "Physical", career: "Career", financial: "Financial", spiritual: "Spiritual", intellectual: "Intellectual", social: "Social" };
+
+let selectedTraitId = null;
+let traits = [];
+
+const $ = (id) => document.getElementById(id);
+
+function setMsg(el, text, ok) {
+  el.textContent = text || "";
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+async function checkSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) { showApp(session); }
+}
+
+function showApp(session) {
+  $("login").style.display = "none";
+  $("app").style.display = "block";
+  $("whoami").textContent = "Signed in as " + session.user.email;
+  loadTraits();
+}
+
+$("signInBtn").onclick = async () => {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  $("signInBtn").disabled = true;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  $("signInBtn").disabled = false;
+  if (error) { setMsg($("loginMsg"), error.message, false); return; }
+  showApp(data.session);
+};
+
+$("signOutBtn").onclick = async () => {
+  await sb.auth.signOut();
+  location.reload();
+};
+
+async function loadTraits() {
+  const { data, error } = await sb.from("trait_catalog").select("id, name, category").order("name");
+  if (error) { console.error(error); return; }
+  traits = data || [];
+  renderTraitList();
+}
+
+function renderTraitList() {
+  const list = $("traitList");
+  list.innerHTML = "";
+  if (traits.length === 0) {
+    list.innerHTML = '<span style="color:var(--muted); font-size:13px;">No traits yet — add one above.</span>';
+    return;
+  }
+  traits.forEach((t) => {
+    const chip = document.createElement("div");
+    chip.className = "trait-chip" + (t.id === selectedTraitId ? " selected" : "");
+    chip.innerHTML = t.name + '<span class="cat">' + (CATEGORY_LABEL[t.category] || t.category) + "</span>";
+    chip.onclick = () => selectTrait(t.id);
+    list.appendChild(chip);
+  });
+}
+
+async function selectTrait(id) {
+  selectedTraitId = id;
+  renderTraitList();
+  const t = traits.find((x) => x.id === id);
+  $("traitDetail").style.display = "block";
+  $("selectedTraitHeading").textContent = t.name + " — " + (CATEGORY_LABEL[t.category] || t.category);
+  await loadActions();
+}
+
+async function loadActions() {
+  const { data, error } = await sb
+    .from("trait_catalog_actions")
+    .select("id, tier, vertical, action_text, position")
+    .eq("trait_id", selectedTraitId)
+    .order("tier")
+    .order("position");
+  if (error) { console.error(error); return; }
+  [0, 1, 2].forEach((tier) => {
+    const container = $("actions-" + tier);
+    container.innerHTML = "";
+    (data || []).filter((a) => a.tier === tier).forEach((a) => {
+      const item = document.createElement("div");
+      item.className = "action-item";
+      item.innerHTML =
+        '<div>' + escapeHtml(a.action_text) + '<span class="vtag">' + escapeHtml(a.vertical) + '</span></div>' +
+        '<button class="danger" data-id="' + a.id + '">delete</button>';
+      item.querySelector("button").onclick = () => deleteAction(a.id);
+      container.appendChild(item);
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function deleteAction(id) {
+  const { error } = await sb.from("trait_catalog_actions").delete().eq("id", id);
+  if (error) { setMsg($("actionMsg"), error.message, false); return; }
+  await loadActions();
+}
+
+$("addTraitBtn").onclick = async () => {
+  const name = $("newTraitName").value.trim();
+  const category = $("newTraitCategory").value;
+  if (!name) { setMsg($("addTraitMsg"), "Enter a trait name first.", false); return; }
+  const { data, error } = await sb.from("trait_catalog").insert({ name, category }).select().single();
+  if (error) { setMsg($("addTraitMsg"), error.message, false); return; }
+  setMsg($("addTraitMsg"), "Added “" + name + "”.", true);
+  $("newTraitName").value = "";
+  await loadTraits();
+  selectTrait(data.id);
+};
+
+document.querySelectorAll(".addActionBtn").forEach((btn) => {
+  btn.onclick = async () => {
+    const tier = parseInt(btn.dataset.tier, 10);
+    const text = $("newAction-" + tier).value.trim();
+    const vertical = $("vertical-" + tier).value.trim() || "core";
+    if (!selectedTraitId) { setMsg($("actionMsg"), "Pick a trait first.", false); return; }
+    if (!text) { setMsg($("actionMsg"), "Enter action text first.", false); return; }
+    const { error } = await sb.from("trait_catalog_actions").insert({
+      trait_id: selectedTraitId, tier, vertical, action_text: text,
+    });
+    if (error) { setMsg($("actionMsg"), error.message, false); return; }
+    setMsg($("actionMsg"), "Action added.", true);
+    $("newAction-" + tier).value = "";
+    await loadActions();
+  };
+});
+
+checkSession();
+</script>
+</body>
+</html>
