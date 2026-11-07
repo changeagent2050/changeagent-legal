@@ -109,6 +109,9 @@
 
   <h2>Traits</h2>
   <div class="panel">
+    <div class="row">
+      <div><input id="traitSearch" placeholder="Search traits by name..." style="width:100%;"></div>
+    </div>
     <div id="traitList" class="trait-list"></div>
   </div>
 
@@ -164,6 +167,7 @@ const CATEGORY_LABEL = { physical: "Physical", career: "Career", financial: "Fin
 
 let selectedTraitId = null;
 let traits = [];
+let traitFilter = "";
 
 const $ = (id) => document.getElementById(id);
 
@@ -213,7 +217,13 @@ function renderTraitList() {
     list.innerHTML = '<span style="color:var(--muted); font-size:13px;">No traits yet — add one above.</span>';
     return;
   }
-  traits.forEach((t) => {
+  const q = traitFilter.toLowerCase();
+  const visible = q ? traits.filter((t) => t.name.toLowerCase().includes(q)) : traits;
+  if (visible.length === 0) {
+    list.innerHTML = '<span style="color:var(--muted); font-size:13px;">No traits match “' + escapeHtml(traitFilter) + '”.</span>';
+    return;
+  }
+  visible.forEach((t) => {
     const chip = document.createElement("div");
     chip.className = "trait-chip" + (t.id === selectedTraitId ? " selected" : "");
     chip.innerHTML = t.name + '<span class="cat">' + (CATEGORY_LABEL[t.category] || t.category) + "</span>";
@@ -292,6 +302,11 @@ document.querySelectorAll(".addActionBtn").forEach((btn) => {
     await loadActions();
   };
 });
+
+$("traitSearch").oninput = () => {
+  traitFilter = $("traitSearch").value.trim();
+  renderTraitList();
+};
 
 checkSession();
 </script>
